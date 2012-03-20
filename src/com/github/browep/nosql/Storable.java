@@ -1,5 +1,6 @@
 package com.github.browep.nosql;
 
+import android.os.Parcel;
 import android.os.Parcelable;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONException;
@@ -13,7 +14,7 @@ import java.util.Map;
 
 public abstract class Storable implements Parcelable{
     private Map<String, Object> map = new HashMap<String, Object>();
-    private int id;
+    private int id = -1;
     private Date modified;
     private Date created;
 
@@ -110,5 +111,24 @@ public abstract class Storable implements Parcelable{
         }
         return propName + "_" + value;
     }
+
+    public void writeToParcel(Parcel parcel, int i) {
+        try {
+
+            parcel.writeInt(getId());
+            parcel.writeInt(getType());
+            parcel.writeLong(getCreated().getTime());
+            parcel.writeLong(getModified().getTime());
+            parcel.writeString(serialize());
+
+        } catch (IOException e) {
+            Log.e("", e);
+        }
+    }
+
+    public int describeContents() {
+        return 0;
+    }
+
 
 }

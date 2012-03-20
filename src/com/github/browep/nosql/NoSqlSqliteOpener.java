@@ -12,13 +12,12 @@ import java.io.IOException;
 
 public class NoSqlSqliteOpener extends SQLiteOpenHelper {
  
-    //The Android's default system path of your application database.
-
     protected static String DB_NAME = "main_db";
     private static int DB_VERSION = 1;
-    private static final String CREATE_DB_SQL_1 = "CREATE TABLE instances(type INT, created datetime default current_timestamp, modified datetime default current_timestamp, data TEXT);";
-    private static final String CREATE_DB_SQL_2 = "CREATE TABLE indexes(instance_id INT, path VARCHAR(512)); ";
-    private static final String CREATE_DB_SQL_3 = "CREATE INDEX idx_path ON indexes(path); ";
+    private static final String[] SQL_STATEMENTS = new String[]{
+        "CREATE TABLE instances(type INT, created datetime default current_timestamp, modified datetime default current_timestamp, data TEXT);",
+        "CREATE TABLE indexes(instance_id INT, path VARCHAR(512)); ",
+        "CREATE INDEX idx_path ON indexes(path); "};
 
 
     public NoSqlSqliteOpener(Context context){
@@ -30,9 +29,9 @@ public class NoSqlSqliteOpener extends SQLiteOpenHelper {
 
 	@Override
 	public void onCreate(SQLiteDatabase db) {
-        db.execSQL(CREATE_DB_SQL_1);
-        db.execSQL(CREATE_DB_SQL_2);
-        db.execSQL(CREATE_DB_SQL_3);
+        for(String sqlStatement : SQL_STATEMENTS){
+            db.execSQL(sqlStatement);
+        }
 	}
  
 	@Override

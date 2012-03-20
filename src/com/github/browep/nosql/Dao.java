@@ -37,40 +37,47 @@ public class Dao {
     }
 
 
-    public void save(Storable storable) {
+    public void save(final Storable storable) {
         // if there is an id, do an update
 
-        try {
+        doTransaction(new DbTransaction<Object>() {
+            public Object transaction(SQLiteDatabase db) {
+                try {
 
 
-            ContentValues values = new ContentValues();
+                    ContentValues values = new ContentValues();
 
-            values.put("created", SQL_FORMAT.format(storable.getCreated()));
-            values.put("modified", SQL_FORMAT.format(storable.getModified()));
-            values.put("data", storable.serialize());
+                    values.put("created", SQL_FORMAT.format(storable.getCreated()));
+                    values.put("modified", SQL_FORMAT.format(storable.getModified()));
+                    values.put("data", storable.serialize());
 
-            if (storable.getId() == -1) {
-                // storable has not been initialized
-                initialize(storable);
-            }else{
-                db.update(INSTANCES_TABLE_NAME, values, "ROWID = ?", new String[]{String.valueOf(storable.getId())});
+                    if (storable.getId() == -1) {
+                        // storable has not been initialized
+                        initialize(storable);
+                    }else{
+                        db.update(INSTANCES_TABLE_NAME, values, "ROWID = ?", new String[]{String.valueOf(storable.getId())});
+                    }
+
+                    List<String> indexPaths = storable.getIndexBys();
+
+                    // remove all indexes
+                    db.delete(INDEXES_TABLE_NAME, "instance_id = ? ", new String[]{String.valueOf(storable.getId())});
+
+                    // regen them
+                    for (String indexPath : indexPaths) {
+                        values = new ContentValues();
+                        values.put("instance_id", String.valueOf(storable.getId()));
+                        values.put("path", indexPath);
+                        db.insert(INDEXES_TABLE_NAME, null, values);
+                    }
+                } catch (IOException e) {
+                    Log.e("Error trying to save" + storable.toString(), e);
+                }
+                return null;
             }
+        });
 
-            List<String> indexPaths = storable.getIndexBys();
 
-            // remove all indexes
-            db.delete(INDEXES_TABLE_NAME, "instance_id = ? ", new String[]{String.valueOf(storable.getId())});
-
-            // regen them
-            for (String indexPath : indexPaths) {
-                values = new ContentValues();
-                values.put("instance_id", String.valueOf(storable.getId()));
-                values.put("path", indexPath);
-                db.insert(INDEXES_TABLE_NAME, null, values);
-            }
-        } catch (IOException e) {
-            Log.e("Error trying to save" + storable.toString(), e);
-        }
 
     }
 
@@ -100,29 +107,35 @@ public class Dao {
     }
 
 
-    public Storable initialize(Storable storable) {
-        try {
+    public Storable initialize(final Storable storable) {
+
+        return (Storable) doTransaction(new DbTransaction<Storable>() {
+            public Storable transaction(SQLiteDatabase db) {
+                try {
 
 
-// create an entry in the db
-            ContentValues values = new ContentValues();
-            values.put("modified", SQL_FORMAT.format(storable.getModified()));
-            values.put("created", SQL_FORMAT.format(storable.getCreated()));
-            values.put("type", storable.getType());
+                    // create an entry in the db
+                    ContentValues values = new ContentValues();
+                    values.put("modified", SQL_FORMAT.format(storable.getModified()));
+                    values.put("created", SQL_FORMAT.format(storable.getCreated()));
+                    values.put("type", storable.getType());
 
-            try {
-                values.put("data", storable.serialize());
-            } catch (IOException e) {
-                Log.e("", e);
+                    try {
+                        values.put("data", storable.serialize());
+                    } catch (IOException e) {
+                        Log.e("", e);
+                    }
+                    db.insert(INSTANCES_TABLE_NAME, null, values);
+
+                    storable.setId(getLastInsertedRowId());
+                } catch (Exception e) {
+                    Log.d("Exception trying to initialize " + storable, e);
+                }
+
+                return storable;
             }
-            db.insert(INSTANCES_TABLE_NAME, null, values);
-
-            storable.setId(getLastInsertedRowId());
-        } catch (Exception e) {
-            Log.d("Exception trying to initialize " + storable, e);
-        }
-
-        return storable;
+        });
+        
     }
 
     public SQLiteDatabase getOrOpen() {
@@ -130,35 +143,47 @@ public class Dao {
     }
 
     public void dumpDbToLog() {
-        Cursor cursor = null;
 
-        Log.d("dumping to log");
-        try {
+        doTransaction(new DbTransaction() {
+
+            public Object transaction(SQLiteDatabase db) {
+                Cursor cursor = null;
+
+                Log.d("dumping to log");
+                try {
 
 
-            cursor = db.query(INSTANCES_TABLE_NAME, new String[]{"ROWID", "type", "created", "modified", "data"}, null, null, null, null, null, "10000");
-            cursor.moveToFirst();
-            while (!cursor.isAfterLast()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("INSTANCE: ").append(cursor.getInt(0)).append(",").append(cursor.getString(1)).append(",").append(cursor.getString(2)).append(",").append(cursor.getString(3)).append(",").append(cursor.getString(4));
-                Log.d(sb.toString());
-                cursor.moveToNext();
+                    cursor = db.query(INSTANCES_TABLE_NAME, new String[]{"ROWID", "type", "created", "modified", "data"}, null, null, null, null, null, "10000");
+                    cursor.moveToFirst();
+                    while (!cursor.isAfterLast()) {
+                        StringBuilder sb = new StringBuilder();
+                        sb.append("INSTANCE: ").append(cursor.getInt(0)).append(",").append(cursor.getString(1)).append(",").append(cursor.getString(2)).append(",").append(cursor.getString(3)).append(",").append(cursor.getString(4));
+                        Log.d(sb.toString());
+                        cursor.moveToNext();
+                    }
+
+                    cursor.close();
+
+                    cursor = db.query(INDEXES_TABLE_NAME, new String[]{"ROWID", "instance_id", "path"}, null, null, null, null, null, "100000");
+                    cursor.moveToFirst();
+                    while (!cursor.isAfterLast()) {
+                        StringBuilder sb = new StringBuilder();
+                        sb.append("INDEX   : ").append(cursor.getInt(0)).append(",").append(cursor.getInt(1)).append(",").append(cursor.getString(2));
+                        Log.d(sb.toString());
+                        cursor.moveToNext();
+                    }
+                } finally {
+                    if (cursor != null)
+                        cursor.close();
+
+
+                }
+                
+                return null;
             }
 
-            cursor = db.query(INDEXES_TABLE_NAME, new String[]{"ROWID", "instance_id", "path"}, null, null, null, null, null, "100000");
-            cursor.moveToFirst();
-            while (!cursor.isAfterLast()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("INDEX   : ").append(cursor.getInt(0)).append(",").append(cursor.getInt(1)).append(",").append(cursor.getString(2));
-                Log.d(sb.toString());
-                cursor.moveToNext();
-            }
-        } finally {
-            if (cursor != null)
-                cursor.close();
+        });
 
-
-        }
 
     }
 
@@ -341,6 +366,24 @@ public class Dao {
         }
 
         return baos.toString();
+    }
+
+    private Object doTransaction(DbTransaction dbTransaction) {
+        SQLiteDatabase database = (new NoSqlSqliteOpener(self, dbName)).getWritableDatabase();
+        Object ret = null;
+        try {
+            ret = dbTransaction.transaction(database);
+        } catch (Exception e) {
+            Log.e("Exception during transaction",e);
+        } finally {
+            if(database != null)
+                database.close();
+        }
+        return ret;
+    }
+
+    private static interface DbTransaction<T> {
+        public T transaction(SQLiteDatabase db);
     }
 
 

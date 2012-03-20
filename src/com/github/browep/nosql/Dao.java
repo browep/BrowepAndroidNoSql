@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 
-public class Dao {
+public abstract class Dao {
     private static final String INSTANCES_TABLE_NAME = "instances";
     private static final String INDEXES_TABLE_NAME = "indexes";
     private SQLiteDatabase db = null;
@@ -220,7 +220,7 @@ public class Dao {
     private Storable inflate(Cursor cursor) throws InstantiationException, IllegalAccessException, ParseException, IOException {
         Storable storable;
         int type = cursor.getInt(1);
-        Class clazz = CLASS_TO_TYPE.get(type);
+        Class clazz = getClass(type);
         storable = (Storable) clazz.newInstance();
         storable.setId(cursor.getInt(0));
         storable.setCreated(SQL_FORMAT.parse(cursor.getString(2)));
@@ -228,6 +228,8 @@ public class Dao {
         storable.setData(cursor.getString(4));
         return storable;
     }
+
+    protected abstract Class getClass(int type);
 
 
     public List<Storable> where(Map<String, String> wheres) {
